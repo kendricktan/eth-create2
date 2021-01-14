@@ -79,7 +79,7 @@ bool starts_with(const char *a, const char *b)
    return 0;
 }
 
-char* keccak256_solidity(uint8_t *in) {
+char* keccak256_solidity(unsigned char *in) {
     // Keccak 256 context
     sha3_context c;
     const uint8_t *hash;
@@ -93,7 +93,7 @@ char* keccak256_solidity(uint8_t *in) {
     }
 
     // Perform Keccak256
-    sha3_Update(&c, in, sizeof in);
+    sha3_Update(&c, in, 85);
     hash = sha3_Finalize(&c);
     char *result = to_hex(hash);
 
@@ -108,8 +108,20 @@ char* to_bytes32(uint salt) {
     return buf;
 }
 
+unsigned char* hexstr_to_char(const char* hexstr)
+{
+    size_t len = strlen(hexstr);
+    if (len % 2 != 0)
+        return NULL;
+    size_t final_len = len / 2;
+    unsigned char* chrs = (unsigned char*)malloc((final_len+1) * sizeof(*chrs));
+    for (size_t i=0, j=0; j<final_len; i+=2, j++)
+        chrs[j] = (hexstr[i] % 32 + 9) % 25 * 16 + (hexstr[i+1] % 32 + 9) % 25;
+    chrs[final_len] = '\0';
+    return chrs;
+}
+
 int main(int argc, char *argv[]) {
-    // CLI Params
     char *deployer;
     char *bytecodeHash;
     char *pattern;
@@ -132,11 +144,15 @@ int main(int argc, char *argv[]) {
     }
 
     uint salt = 10;
-    char *part1 = concat("0xff", deployer);
+    char *part1 = concat("ff", deployer);
     char *part2 = concat(part1, to_bytes32(salt));
     char *part3 = concat(part2, bytecodeHash);
+    unsigned char* input = hexstr_to_char(part3);
+    char *result = keccak256_solidity(input);
+    result = slice_str(result, 24, strlen(result) + 1);
+    result = concat("0x", result);
 
-    char* result = keccak256_solidity(part3);
+    printf("%s\n", result);
 
     return 0;
 }
