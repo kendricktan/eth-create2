@@ -10,8 +10,16 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <limits.h>
+#include <pthread.h>
 
 #include "sha3.h"
+
+// Globals
+int count = 0;
+uint matchedSalt = 0;
+bool found = false;
+
 
 static void help(const char *argv0) {
     printf("To call: %s [DEPLOYER ADDRESS] [KECCAK256(bytecode)] [ADDRESS PATTERN] \n", argv0);
@@ -64,10 +72,12 @@ static char* to_hex(const uint8_t *hash) {
     char* result = "";
 
     for(unsigned i=0; i<32; i++) {
+        char* t = byte_to_hex(hash[i]);
         result = concat(
             result,
-            byte_to_hex(hash[i])
+            t
         );
+        free(t);
     }
 
     return result;
@@ -121,6 +131,52 @@ unsigned char* hexstr_to_char(const char* hexstr)
     return chrs;
 }
 
+char* create2(char* deployer, char* bytecodeHash, uint salt) {
+    char *csalt = to_bytes32(salt);
+    char *part1 = concat("ff", deployer);
+    char *part2 = concat(part1, csalt);
+    char *part3 = concat(part2, bytecodeHash);
+    unsigned char* input = hexstr_to_char(part3);
+    char *result1 = keccak256_solidity(input);
+    char *result2 = slice_str(result1, 24, strlen(result1) + 1);
+    char *result3 = concat("0x", result2);
+
+    free(csalt);
+    free(part1);
+    free(part2);
+    free(part3);
+    free(input);
+    free(result1);
+    free(result2);
+
+    return result3;
+}
+
+void create2Thread(char* deployer, char* bytecodeHash, uint saltStart, uint offset, char* pattern) {
+    char *result;
+    
+    for (uint i = saltStart; i < UINT_MAX; i += offset) {
+        char *result = create2(deployer, bytecodeHash, i);
+
+        count = count + 1;
+
+        if (strstr(result, pattern) != NULL) {
+            found = true;
+            matchedSalt = i;
+
+            printf("Found salt!\n");
+            printf("Salt: 0x%064x\n", i);
+            printf("Address: %s\n", result);
+        }
+
+        free(result);
+
+        if (found) {
+            return;
+        }
+    }
+}
+
 int main(int argc, char *argv[]) {
     char *deployer;
     char *bytecodeHash;
@@ -143,16 +199,10 @@ int main(int argc, char *argv[]) {
         bytecodeHash = slice_str(bytecodeHash, 2, strlen(bytecodeHash) + 1);
     }
 
-    uint salt = 10;
-    char *part1 = concat("ff", deployer);
-    char *part2 = concat(part1, to_bytes32(salt));
-    char *part3 = concat(part2, bytecodeHash);
-    unsigned char* input = hexstr_to_char(part3);
-    char *result = keccak256_solidity(input);
-    result = slice_str(result, 24, strlen(result) + 1);
-    result = concat("0x", result);
+    create2Thread(deployer, bytecodeHash, 0, 1, pattern);
 
-    printf("%s\n", result);
+    free(deployer);
+    free(bytecodeHash);
 
     return 0;
 }

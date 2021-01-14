@@ -2,7 +2,7 @@
 CC=gcc
 INSTALL=install
 prefix=/usr/local
-CFLAGS=-Wall -ggdb -O2 -I.
+CFLAGS=-Wall -Wextra -pedantic -ggdb -O2 -I.
 LDFLAGS=
 
 .PHONY : all test clean 
